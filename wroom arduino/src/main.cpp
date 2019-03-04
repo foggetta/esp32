@@ -1,10 +1,15 @@
+
+
 #include <Arduino.h>
 #include <string.h>
 #include <time.h>
-#include <sys/time.h>
+//#include "sys/time.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
+#include "freertos/queue.h"
+
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "esp_event_loop.h"
@@ -16,43 +21,55 @@
 #include "lwip/err.h"
 #include "lwip/apps/sntp.h"
 
+#include "driver/gpio.h"
 #include "driver/rtc_io.h"
+#include "driver/adc.h"
+#include "gpio_esp32.h"
 
 /* The examples use simple WiFi configuration that you can set via
    'make menuconfig'.
    If you'd rather not, just change the below entries to strings with
    the config you want - ie #define EXAMPLE_WIFI_SSID "mywifissid"
 */
-#define EXAMPLE_WIFI_SSID "yyy"
-#define EXAMPLE_WIFI_PASS "xxx"
-#define WAKEUP_GPIO GPIO_NUM_36
-//enable GPIO36 and GPIO33
-#define BUTTON_PIN_BITMASK 0x1200000000
+#define EXAMPLE_WIFI_SSID "MiA2_luke"
+#define EXAMPLE_WIFI_PASS "foggettA"
+
+#define ANA_CH ADC1_CHANNEL_6
+
+//if you want to have more RTC GPIO waking up from sleep enable esp_sleep_enable_ext1_wakeup 
+//the bit mask of GPIO numbers which will cause wakeup. 
+//Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39
+#define BUTTON_PIN_BITMASK  ((1ULL<<GPIO_NUM_26) | (1ULL<<GPIO_NUM_25))
+
+int i=0;
+esp_sleep_wakeup_cause_t wakeup_probe;
+uint64_t time_in_us = 10000000;
 /* FreeRTOS event group to signal when we are connected & ready to make a request */
 static EventGroupHandle_t wifi_event_group;
-
 /* The event group allows multiple bits for each event,
    but we only care about one event - are we connected
    to the AP with an IP? */
 const int CONNECTED_BIT = BIT0;
-int i=0;
-esp_sleep_wakeup_cause_t wakeup_probe;
-uint64_t time_in_us = 10000000;
-time_t now;
-tm timeinfo;
-static const char *TAG = "example";
+//static const char *TAG = "example";
 
 /* Variable holding number of times ESP32 restarted since first boot.
  * It is placed into RTC memory using RTC_DATA_ATTR and
  * maintains its value when ESP32 wakes from deep sleep.
  */
-RTC_DATA_ATTR static int boot_count = 0;
-RTC_DATA_ATTR static int bootCount = 0;
+static void try_time(void);
 static void obtain_time(void);
 static void initialize_sntp(void);
 static void initialise_wifi(void);
 static esp_err_t event_handler(void *ctx, system_event_t *event);
-void print_wakeup_reason();
+void setup_adc(void);
+void print_wakeup_reason(void);
+
+
+
+//ulp memory data in sleep mode
+RTC_DATA_ATTR static int boot_count = 0;
+RTC_DATA_ATTR static int bootCount = 0;
+RTC_DATA_ATTR static int cnt = 0;
 
 void setup() {
   
@@ -77,16 +94,15 @@ void setup() {
   Note that using internal pullups/pulldowns also requires
   RTC peripherals to be turned on.
   */
-  rtc_gpio_pulldown_dis(GPIO_NUM_33);
-  rtc_gpio_pullup_en(GPIO_NUM_33);
-  //UNMARK 
-  esp_sleep_enable_ext0_wakeup(GPIO_NUM_33,0); //1 = High, 0 = Low
-
+  
+  rtc_gpio_pulldown_dis(GPIO_NUM_26);
+  rtc_gpio_pullup_en(GPIO_NUM_26);
+  ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(GPIO_NUM_26,0)); //1 = High, 0 = Low
   //If you were to use ext1, you would use it like
-  //esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK,ESP_EXT1_WAKEUP_ANY_HIGH);
+  //esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK,ESP_EXT1_WAKEUP_ALL_LOW);
 
   //Go to sleep now
-  Serial.println("Going to sleep now");
+  //Serial.println("Going to sleep now");
   //UNMARK 
   //esp_deep_sleep_start();
 }
@@ -102,42 +118,32 @@ void loop() {
     Serial.printf("Boot count: %d\n", ++boot_count);
 
 
-    time(&now);
-    localtime_r(&now, &timeinfo);
-    // Is time set? If not, tm_year will be (1970 - 1900).
-    if (timeinfo.tm_year < (2016 - 1900)) {
-        Serial.printf("Time is not set yet. Connecting to WiFi and getting time over NTP.\n");
-        obtain_time();
-        // update 'now' variable with current time
-        time(&now);
-        Serial.printf("Wakeup time is %s \n", asctime(&timeinfo) );
-   }    
-    
-        char strftime_buf[64];
+    try_time();
+    setup_gpio(NULL);
+    setup_adc();
 
-    // Set timezone to Eastern Standard Time and print local time
+    //rtc_gpio_deinit(DIG_GPIO);
     
-    localtime_r(&now, &timeinfo);
-    strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-    Serial.printf("The current date/time in New York is: %s\n", strftime_buf);
+    
+    for (i=0;i<10;i++){
+      Serial.printf("\n\n\n\nWaked up on %d times!!!\n", boot_count);
+      delay(2000);
+      //Note that even the hall sensor is internal to ESP32,
+      // reading from it uses channels 0 and 3 of ADC1 (GPIO 36 and 39). Do not connect anything else to these pins
+      Serial.printf("Hall sensor level=%d\n",hall_sensor_read());
 
-    
-
-    //rtc_gpio_deinit(WAKEUP_GPIO);
-    
-    gpio_pulldown_dis(WAKEUP_GPIO);
-    gpio_pullup_en(WAKEUP_GPIO);
-    for (i=0;i<3;i++){
-      Serial.printf("Waked up on %d times!!!\n", boot_count);
-      delay(1000);
-      Serial.printf("GPIO%d level=%d\n",WAKEUP_GPIO,gpio_get_level(GPIO_NUM_36));
+      printf("OUTPUT level %d on cnt: %d\n",cnt % 2, cnt++);
+      gpio_set_level((gpio_num_t)GPIO_OUTPUT_IO_0, cnt % 2);
+      gpio_set_level((gpio_num_t)GPIO_OUTPUT_IO_1, cnt % 2);
+      read_gpio((gpio_num_t)DIG_GPIO);      
+      Serial.printf("ADC%d on GPIO%d level=%d\n", ANA_CH, ADC1_CHANNEL_6_GPIO_NUM ,analogRead(ANA_CH));
     }
 
     Serial.println("\nNow entering in sleep mode ***\n");
-    //rtc_gpio_init(WAKEUP_GPIO);
-    //rtc_gpio_pulldown_dis(WAKEUP_GPIO);
-    //rtc_gpio_pullup_en(WAKEUP_GPIO);
-    //esp_sleep_enable_ext0_wakeup(WAKEUP_GPIO, 0);
+    //rtc_gpio_init(DIG_GPIO);
+    //rtc_gpio_pulldown_dis(DIG_GPIO);
+    //rtc_gpio_pullup_en(DIG_GPIO);
+    //esp_sleep_enable_ext0_wakeup(DIG_GPIO, 0);
     esp_sleep_enable_timer_wakeup(time_in_us);
     esp_deep_sleep_start();
 
@@ -165,7 +171,41 @@ void print_wakeup_reason(){
   }
 }
 
+//ESP32 DevKitC: GPIO 0 cannot be used due to external auto program circuits.
+//ESP-WROVER-KIT: GPIO 0, 2, 4 and 15 cannot be used due to external connections for different purposes.
+void setup_adc(){
+  adc1_config_width(ADC_WIDTH_BIT_12); 
+  adc1_config_channel_atten(ANA_CH, ADC_ATTEN_DB_0);
+  return;
+}
 
+static void try_time(){
+
+    char strftime_buf[64];
+    time_t now;
+    tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    // Is time set? If not, tm_year will be (1970 - 1900).
+    if (timeinfo.tm_year < (2016 - 1900)) {
+        Serial.printf("Time is not set yet. Connecting to WiFi and getting time over NTP.\n");
+        obtain_time();
+        // update 'now' variable with current time
+        time(&now);
+        Serial.printf("Wakeup time is %s \n", asctime(&timeinfo) );
+   }    
+    
+    
+
+    // Set timezone to Eastern Standard Time and print local time
+    
+    localtime_r(&now, &timeinfo);
+    strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+    Serial.printf("The current date/time in New York is: %s\n", strftime_buf);
+
+
+  return;
+}
 
 static void obtain_time(void)
 {
@@ -206,13 +246,18 @@ static void initialise_wifi(void)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
     ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM) );
-    //wifi_config_t wifi_config ;
+
     wifi_config_t wifi_config = {
-      .sta = {
-        {.ssid = EXAMPLE_WIFI_SSID},
-        {.password = EXAMPLE_WIFI_PASS}
-      },
+        .sta = {
+            {.ssid = EXAMPLE_WIFI_SSID},
+            {.password = EXAMPLE_WIFI_PASS},
+        }
     };
+
+/* wifi_config_t wifi_config = { };
+strcpy((char*)wifi_config.sta.ssid, "ssid");
+strcpy((char*)wifi_config.sta.password, "password"); */
+
     Serial.printf("Setting WiFi configuration SSID %s...\n", wifi_config.sta.ssid);
     Serial.printf("Wifi mode err %d,",ESP_OK || esp_wifi_set_mode(WIFI_MODE_STA) );
     Serial.printf("Wifi set err %d,",ESP_OK || esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
