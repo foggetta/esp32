@@ -1,5 +1,3 @@
-
-
 #include <Arduino.h>
 #include <string.h>
 #include <time.h>
@@ -23,24 +21,27 @@
 
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
-#include "driver/adc.h"
-#include "gpio_esp32.h"
 
+
+#include "gpio_esp32.h"
+#include "adc_esp32.h"
 /* The examples use simple WiFi configuration that you can set via
    'make menuconfig'.
    If you'd rather not, just change the below entries to strings with
    the config you want - ie #define EXAMPLE_WIFI_SSID "mywifissid"
 */
-#define EXAMPLE_WIFI_SSID "MiA2_luke"
-#define EXAMPLE_WIFI_PASS "foggettA"
-
+#define EXAMPLE_WIFI_SSID "casafoggetta"
+#define EXAMPLE_WIFI_PASS "ferrarifoggetta"
 #define ANA_CH ADC1_CHANNEL_6
+#define ANA_CH_GPIO_NUM ADC1_CHANNEL_6_GPIO_NUM
+
 
 //if you want to have more RTC GPIO waking up from sleep enable esp_sleep_enable_ext1_wakeup 
 //the bit mask of GPIO numbers which will cause wakeup. 
 //Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39
 #define BUTTON_PIN_BITMASK  ((1ULL<<GPIO_NUM_26) | (1ULL<<GPIO_NUM_25))
 
+uint32_t volt;
 int i=0;
 esp_sleep_wakeup_cause_t wakeup_probe;
 uint64_t time_in_us = 10000000;
@@ -61,14 +62,14 @@ static void obtain_time(void);
 static void initialize_sntp(void);
 static void initialise_wifi(void);
 static esp_err_t event_handler(void *ctx, system_event_t *event);
-void setup_adc(void);
+void setup_adc1(adc1_channel_t);
 void print_wakeup_reason(void);
 
 
 
 //ulp memory data in sleep mode
-RTC_DATA_ATTR static int boot_count = 0;
-RTC_DATA_ATTR static int bootCount = 0;
+RTC_DATA_ATTR static int bootCount_loop = 0;
+RTC_DATA_ATTR static int bootCount_setup = 0;
 RTC_DATA_ATTR static int cnt = 0;
 
 void setup() {
@@ -78,8 +79,8 @@ void setup() {
   delay(1000); //Take some time to open up the Serial Monitor
 
   //Increment boot number and print it every reboot
-  ++bootCount;
-  Serial.println("BootCount number: " + String(++bootCount));
+  ++bootCount_setup;
+  Serial.println("BootCount_setup number: " + String(++bootCount_setup));
 
   //Print the wakeup reason for ESP32
   print_wakeup_reason();
@@ -115,18 +116,18 @@ void loop() {
     delay(2000);
     print_wakeup_reason();
 
-    Serial.printf("Boot count: %d\n", ++boot_count);
+    Serial.printf("Boot count: %d\n", ++bootCount_loop);
 
 
     try_time();
     setup_gpio(NULL);
-    setup_adc();
+    setup_adc1(ANA_CH);
 
     //rtc_gpio_deinit(DIG_GPIO);
     
     
     for (i=0;i<10;i++){
-      Serial.printf("\n\n\n\nWaked up on %d times!!!\n", boot_count);
+      Serial.printf("\n\n\n\nWaked up on %d times!!!\n", bootCount_loop);
       delay(2000);
       //Note that even the hall sensor is internal to ESP32,
       // reading from it uses channels 0 and 3 of ADC1 (GPIO 36 and 39). Do not connect anything else to these pins
@@ -136,7 +137,7 @@ void loop() {
       gpio_set_level((gpio_num_t)GPIO_OUTPUT_IO_0, cnt % 2);
       gpio_set_level((gpio_num_t)GPIO_OUTPUT_IO_1, cnt % 2);
       read_gpio((gpio_num_t)DIG_GPIO);      
-      Serial.printf("ADC%d on GPIO%d level=%d\n", ANA_CH, ADC1_CHANNEL_6_GPIO_NUM ,analogRead(ANA_CH));
+      Serial.printf("ADC%d on GPIO%d level=%f\n", ANA_CH, ANA_CH_GPIO_NUM, (read_voltage(ADC_CHANNEL_6,&volt))/1000.);
     }
 
     Serial.println("\nNow entering in sleep mode ***\n");
@@ -171,13 +172,6 @@ void print_wakeup_reason(){
   }
 }
 
-//ESP32 DevKitC: GPIO 0 cannot be used due to external auto program circuits.
-//ESP-WROVER-KIT: GPIO 0, 2, 4 and 15 cannot be used due to external connections for different purposes.
-void setup_adc(){
-  adc1_config_width(ADC_WIDTH_BIT_12); 
-  adc1_config_channel_atten(ANA_CH, ADC_ATTEN_DB_0);
-  return;
-}
 
 static void try_time(){
 
