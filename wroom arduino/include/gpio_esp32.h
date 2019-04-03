@@ -24,14 +24,13 @@
  * Generate pulses on GPIO18/19, that triggers interrupt on GPIO4/5
  *
  */
+#define DIG_GPIO    33
 #define GPIO_OUTPUT_IO_0    18
 #define GPIO_OUTPUT_IO_1    19
-#define GPIO_OUTPUT_PIN_SEL  ((1ULL<<GPIO_OUTPUT_IO_0) | (1ULL<<GPIO_OUTPUT_IO_1))
+#define GPIO_OUTPUT_PIN_SEL  ((1ULL<<GPIO_OUTPUT_IO_0) | (1ULL<<GPIO_OUTPUT_IO_1) | (1ULL<<DIG_GPIO))
 #define GPIO_INPUT_IO_0     4
 #define GPIO_INPUT_IO_1     5
-#define DIG_GPIO    33
-#define GPIO_INPUT_PIN_SEL  ((1ULL<<GPIO_INPUT_IO_0) | (1ULL<<GPIO_INPUT_IO_1) | (1ULL<<DIG_GPIO))
-//#define DIG_GPIO_SEL (1ULL<<DIG_GPIO)
+#define GPIO_INPUT_PIN_SEL  ((1ULL<<GPIO_INPUT_IO_0) | (1ULL<<GPIO_INPUT_IO_1))
 
 
 #define ESP_INTR_FLAG_DEFAULT 0
@@ -72,8 +71,8 @@ static void gpio_task_1(void* arg)
                     printf("TASK 1 on GPIO[%d] intr, val: %d\n", io_num, gpio_get_level(io_num));
                     break;
                 case GPIO_INPUT_IO_1:
-                    printf("Deep Sleep start in one second due to GPIO[%d] intr, val: %d\n", io_num, gpio_get_level(io_num));
-                    delay(1000);
+                    printf("Deep Sleep start in two second due to GPIO[%d] intr, val: %d\n", io_num, gpio_get_level(io_num));
+                    delay(2000);
                     esp_deep_sleep_start();
                 default:
 
@@ -141,7 +140,6 @@ int setup_gpio(void* arg) {
    ESP_ERROR_CHECK(gpio_isr_handler_add((gpio_num_t) GPIO_INPUT_IO_1, gpio_isr_handler,(void *) GPIO_INPUT_IO_1 ));
  
     //remove isr handler for gpio number.
-    gpio_isr_handler_remove((gpio_num_t) DIG_GPIO);
     //hook isr handler for specific gpio pin again
     //gpio_isr_handler_add((gpio_num_t)GPIO_INPUT_IO_0, gpio_isr_handler, (void*) GPIO_INPUT_IO_0);
 

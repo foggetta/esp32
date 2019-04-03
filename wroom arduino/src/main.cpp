@@ -30,8 +30,8 @@
    If you'd rather not, just change the below entries to strings with
    the config you want - ie #define EXAMPLE_WIFI_SSID "mywifissid"
 */
-#define EXAMPLE_WIFI_SSID "casafoggetta"
-#define EXAMPLE_WIFI_PASS "ferrarifoggetta"
+#define EXAMPLE_WIFI_SSID "MiA2_luke"
+#define EXAMPLE_WIFI_PASS "foggettA"
 #define ANA_CH ADC1_CHANNEL_6
 #define ANA_CH_GPIO_NUM ADC1_CHANNEL_6_GPIO_NUM
 
@@ -125,19 +125,23 @@ void loop() {
 
     //rtc_gpio_deinit(DIG_GPIO);
     
-    
-    for (i=0;i<10;i++){
-      Serial.printf("\n\n\n\nWaked up on %d times!!!\n", bootCount_loop);
-      delay(2000);
+    int loopn=30;
+    for (i=1;i<=loopn;i++){
+        Serial.printf("\n\n\nLOOP %d\nWaked up on %d times!!!\n",i, bootCount_loop);
+        gpio_set_level((gpio_num_t)DIG_GPIO, 1);
+        delay(500);
+        gpio_set_level((gpio_num_t)DIG_GPIO, 0);
+
       //Note that even the hall sensor is internal to ESP32,
       // reading from it uses channels 0 and 3 of ADC1 (GPIO 36 and 39). Do not connect anything else to these pins
-      Serial.printf("Hall sensor level=%d\n",hall_sensor_read());
+        Serial.printf("Hall sensor level=%d\n",hall_sensor_read());
 
-      printf("OUTPUT level %d on cnt: %d\n",cnt % 2, cnt++);
-      gpio_set_level((gpio_num_t)GPIO_OUTPUT_IO_0, cnt % 2);
-      gpio_set_level((gpio_num_t)GPIO_OUTPUT_IO_1, cnt % 2);
-      read_gpio((gpio_num_t)DIG_GPIO);      
-      Serial.printf("ADC%d on GPIO%d level=%f\n", ANA_CH, ANA_CH_GPIO_NUM, (read_voltage(ADC_CHANNEL_6,&volt))/1000.);
+        printf("OUTPUT level %d on cnt: %d\n",cnt % 2, cnt++);
+        gpio_set_level((gpio_num_t)GPIO_OUTPUT_IO_0, cnt % 2);
+        gpio_set_level((gpio_num_t)GPIO_OUTPUT_IO_1, i % loopn);
+        Serial.printf("ADC%d on GPIO%d level=%f\n", ANA_CH, ANA_CH_GPIO_NUM, (read_voltage(ADC_CHANNEL_6,&volt))/1000.);
+        
+     
     }
 
     Serial.println("\nNow entering in sleep mode ***\n");
