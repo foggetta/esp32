@@ -30,8 +30,8 @@
    If you'd rather not, just change the below entries to strings with
    the config you want - ie #define EXAMPLE_WIFI_SSID "mywifissid"
 */
-#define EXAMPLE_WIFI_SSID "MiA2_luke"
-#define EXAMPLE_WIFI_PASS "foggettA"
+#define EXAMPLE_WIFI_SSID "XXX"
+#define EXAMPLE_WIFI_PASS "YYY"
 #define ANA_CH ADC1_CHANNEL_6
 #define ANA_CH_GPIO_NUM ADC1_CHANNEL_6_GPIO_NUM
 

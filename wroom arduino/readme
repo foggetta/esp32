@@ -1,0 +1,7 @@
+output on channel 18 and 19: on every loop =, the loop number %2 is the outputted level
+input channel 4: the task is the printout of the digital level, the task starts on each level variation
+input channel 5: the task is to put in depp slepp mode the esp32, the task start on rising edge only
+input channel 33: loop only read the digital level
+setup() set the RTC deep sleep wakeup on ch 260( pulled up) on level 0 (GND)
+loop() check wireless and sync NTP time, setup and implement tasks, perform readout both analog and digital, 
+  set up timer deep sleep wakeup and starts deep sleep
